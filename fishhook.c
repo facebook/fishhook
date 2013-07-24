@@ -62,14 +62,14 @@ static void perform_rebinding_with_section(struct section *section,
                                            char *strtab,
                                            uint32_t *indirect_symtab) {
   uint32_t *indirect_symbol_indices = indirect_symtab + section->reserved1;
-  void **indirect_symbol_bindings = (void **)(slide + section->addr);
-  for (int i = 0; i < section->size / sizeof(void *); i++) {
+  void **indirect_symbol_bindings = (void **)((uintptr_t)slide + section->addr);
+  for (uint i = 0; i < section->size / sizeof(void *); i++) {
     uint32_t symtab_index = indirect_symbol_indices[i];
     int32_t strtab_offset = symtab[symtab_index].n_un.n_strx;
     char *symbol_name = strtab + strtab_offset;
     struct rebindings_entry *cur = rebindings_head;
     while (cur) {
-      for (int j = 0; j < cur->rebindings_nel; j++) {
+      for (uint j = 0; j < cur->rebindings_nel; j++) {
         if (strlen(symbol_name) > 1 &&
             strcmp(&symbol_name[1], cur->rebindings[j].name) == 0) {
           indirect_symbol_bindings[i] = cur->rebindings[j].replacement;
@@ -88,14 +88,14 @@ static void rebind_symbols_for_image(const struct mach_header *header,
   if (dladdr(header, &info) == 0) {
     return;
   }
-  intptr_t cur = (intptr_t)header + sizeof(struct mach_header);
+  uintptr_t cur = (uintptr_t)header + sizeof(struct mach_header);
   struct segment_command* cur_seg_cmd;
   struct segment_command* linkedit_segment = NULL;
   struct section* lazy_symbols = NULL;
   struct section* non_lazy_symbols = NULL;
   struct symtab_command* symtab_cmd = NULL;
   struct dysymtab_command* dysymtab_cmd = NULL;
-  for (int i = 0; i < header->ncmds; i++, cur += cur_seg_cmd->cmdsize) {
+  for (uint i = 0; i < header->ncmds; i++, cur += cur_seg_cmd->cmdsize) {
     cur_seg_cmd = (struct segment_command*)cur;
     if (cur_seg_cmd->cmd == LC_SEGMENT) {
       if (strcmp(cur_seg_cmd->segname, SEG_LINKEDIT) == 0) {
@@ -105,7 +105,7 @@ static void rebind_symbols_for_image(const struct mach_header *header,
       if (strcmp(cur_seg_cmd->segname, SEG_DATA) != 0) {
         continue;
       }
-      for (int j = 0; j < cur_seg_cmd->nsects; j++) {
+      for (uint j = 0; j < cur_seg_cmd->nsects; j++) {
         struct section* sect =
           (struct section *)(cur + sizeof(struct segment_command)) + j;
         if ((sect->flags & SECTION_TYPE) == S_LAZY_SYMBOL_POINTERS) {
@@ -126,7 +126,7 @@ static void rebind_symbols_for_image(const struct mach_header *header,
     return;
   }
   // Find base symbol/string table addresses
-  uint32_t linkedit_base = slide + linkedit_segment->vmaddr - linkedit_segment->fileoff;
+  uint32_t linkedit_base = (uintptr_t)slide + linkedit_segment->vmaddr - linkedit_segment->fileoff;
   struct nlist* symtab = (struct nlist *)(linkedit_base + symtab_cmd->symoff);
   char *strtab = (char *)(linkedit_base + symtab_cmd->stroff);
   // Get indirect symbol table (array of uint32_t indices into symbol table)
