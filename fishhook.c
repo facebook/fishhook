@@ -47,6 +47,7 @@ static int prepend_rebindings(struct rebinding rebindings[], size_t nel) {
   }
   new_entry->rebindings = malloc(sizeof(struct rebinding) * nel);
   if (!new_entry->rebindings) {
+    free(new_entry);
     return -1;
   }
   memcpy(new_entry->rebindings, rebindings, sizeof(struct rebinding) * nel);
