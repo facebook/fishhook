@@ -51,9 +51,11 @@ struct rebindings_entry {
   struct rebindings_entry *next;
 };
 
-static struct rebindings_entry *rebindings_head;
+static struct rebindings_entry *_rebindings_head;
 
-static int prepend_rebindings(struct rebinding rebindings[], size_t nel) {
+static int prepend_rebindings(struct rebindings_entry **rebindings_head,
+                              struct rebinding rebindings[],
+                              size_t nel) {
   struct rebindings_entry *new_entry = malloc(sizeof(struct rebindings_entry));
   if (!new_entry) {
     return -1;
@@ -65,12 +67,13 @@ static int prepend_rebindings(struct rebinding rebindings[], size_t nel) {
   }
   memcpy(new_entry->rebindings, rebindings, sizeof(struct rebinding) * nel);
   new_entry->rebindings_nel = nel;
-  new_entry->next = rebindings_head;
-  rebindings_head = new_entry;
+  new_entry->next = *rebindings_head;
+  *rebindings_head = new_entry;
   return 0;
 }
 
-static void perform_rebinding_with_section(section_t *section,
+static void perform_rebinding_with_section(struct rebindings_entry *rebindings,
+                                           section_t *section,
                                            intptr_t slide,
                                            nlist_t *symtab,
                                            char *strtab,
@@ -85,7 +88,7 @@ static void perform_rebinding_with_section(section_t *section,
     }
     uint32_t strtab_offset = symtab[symtab_index].n_un.n_strx;
     char *symbol_name = strtab + strtab_offset;
-    struct rebindings_entry *cur = rebindings_head;
+    struct rebindings_entry *cur = rebindings;
     while (cur) {
       for (uint j = 0; j < cur->rebindings_nel; j++) {
         if (strlen(symbol_name) > 1 &&
@@ -100,7 +103,8 @@ static void perform_rebinding_with_section(section_t *section,
   }
 }
 
-static void rebind_symbols_for_image(const struct mach_header *header,
+static void rebind_symbols_for_image(struct rebindings_entry *rebindings,
+                                     const struct mach_header *header,
                                      intptr_t slide) {
   Dl_info info;
   if (dladdr(header, &info) == 0) {
@@ -150,26 +154,42 @@ static void rebind_symbols_for_image(const struct mach_header *header,
   // Get indirect symbol table (array of uint32_t indices into symbol table)
   uint32_t *indirect_symtab = (uint32_t *)(linkedit_base + dysymtab_cmd->indirectsymoff);
   if (lazy_symbols) {
-    perform_rebinding_with_section(lazy_symbols, slide, symtab, strtab, indirect_symtab);
+    perform_rebinding_with_section(rebindings, lazy_symbols, slide, symtab, strtab, indirect_symtab);
   }
   if (non_lazy_symbols) {
-    perform_rebinding_with_section(non_lazy_symbols, slide, symtab, strtab, indirect_symtab);
+    perform_rebinding_with_section(rebindings, non_lazy_symbols, slide, symtab, strtab, indirect_symtab);
   }
 }
 
+static void _rebind_symbols_for_image(const struct mach_header *header,
+                                      intptr_t slide) {
+    rebind_symbols_for_image(_rebindings_head, header, slide);
+}
+
+int rebind_symbols_image(void *header,
+                         intptr_t slide,
+                         struct rebinding rebindings[],
+                         size_t rebindings_nel) {
+    struct rebindings_entry *rebindings_head = NULL;
+    int retval = prepend_rebindings(&rebindings_head, rebindings, rebindings_nel);
+    rebind_symbols_for_image(rebindings_head, header, slide);
+    free(rebindings_head);
+    return retval;
+}
+
 int rebind_symbols(struct rebinding rebindings[], size_t rebindings_nel) {
-  int retval = prepend_rebindings(rebindings, rebindings_nel);
+  int retval = prepend_rebindings(&_rebindings_head, rebindings, rebindings_nel);
   if (retval < 0) {
     return retval;
   }
   // If this was the first call, register callback for image additions (which is also invoked for
   // existing images, otherwise, just run on existing images
-  if (!rebindings_head->next) {
-    _dyld_register_func_for_add_image(rebind_symbols_for_image);
+  if (!_rebindings_head->next) {
+    _dyld_register_func_for_add_image(_rebind_symbols_for_image);
   } else {
     uint32_t c = _dyld_image_count();
     for (uint32_t i = 0; i < c; i++) {
-      rebind_symbols_for_image(_dyld_get_image_header(i), _dyld_get_image_vmaddr_slide(i));
+      _rebind_symbols_for_image(_dyld_get_image_header(i), _dyld_get_image_vmaddr_slide(i));
     }
   }
   return retval;
