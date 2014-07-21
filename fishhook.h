@@ -21,6 +21,9 @@
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+#ifndef fishhook_h
+#define fishhook_h
+
 #include <stddef.h>
 #include <stdint.h>
 
@@ -51,3 +54,6 @@ int rebind_symbols_image(void *header,
                          intptr_t slide,
                          struct rebinding rebindings[],
                          size_t rebindings_nel);
+
+#endif
+
