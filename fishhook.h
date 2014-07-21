@@ -22,6 +22,7 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <stddef.h>
+#include <stdint.h>
 
 /*
  * A structure representing a particular intended rebinding from a symbol
