@@ -27,6 +27,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif //__cplusplus
+
 /*
  * A structure representing a particular intended rebinding from a symbol
  * name to its replacement
@@ -55,5 +59,9 @@ int rebind_symbols_image(void *header,
                          struct rebinding rebindings[],
                          size_t rebindings_nel);
 
-#endif
+#ifdef __cplusplus
+}
+#endif //__cplusplus
+
+#endif //fishhook_h
 
