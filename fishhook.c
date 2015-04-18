@@ -110,32 +110,18 @@ static void rebind_symbols_for_image(struct rebindings_entry *rebindings,
   if (dladdr(header, &info) == 0) {
     return;
   }
-  uintptr_t cur = (uintptr_t)header + sizeof(mach_header_t);
+
   segment_command_t *cur_seg_cmd;
   segment_command_t *linkedit_segment = NULL;
-  section_t *lazy_symbols = NULL;
-  section_t *non_lazy_symbols = NULL;
   struct symtab_command* symtab_cmd = NULL;
   struct dysymtab_command* dysymtab_cmd = NULL;
+
+  uintptr_t cur = (uintptr_t)header + sizeof(mach_header_t);
   for (uint i = 0; i < header->ncmds; i++, cur += cur_seg_cmd->cmdsize) {
     cur_seg_cmd = (segment_command_t *)cur;
     if (cur_seg_cmd->cmd == LC_SEGMENT_ARCH_DEPENDENT) {
       if (strcmp(cur_seg_cmd->segname, SEG_LINKEDIT) == 0) {
         linkedit_segment = cur_seg_cmd;
-        continue;
-      }
-      if (strcmp(cur_seg_cmd->segname, SEG_DATA) != 0) {
-        continue;
-      }
-      for (uint j = 0; j < cur_seg_cmd->nsects; j++) {
-        section_t *sect =
-          (section_t *)(cur + sizeof(segment_command_t)) + j;
-        if ((sect->flags & SECTION_TYPE) == S_LAZY_SYMBOL_POINTERS) {
-          lazy_symbols = sect;
-        }
-        if ((sect->flags & SECTION_TYPE) == S_NON_LAZY_SYMBOL_POINTERS) {
-          non_lazy_symbols = sect;
-        }
       }
     } else if (cur_seg_cmd->cmd == LC_SYMTAB) {
       symtab_cmd = (struct symtab_command*)cur_seg_cmd;
@@ -143,21 +129,38 @@ static void rebind_symbols_for_image(struct rebindings_entry *rebindings,
       dysymtab_cmd = (struct dysymtab_command*)cur_seg_cmd;
     }
   }
+
   if (!symtab_cmd || !dysymtab_cmd || !linkedit_segment ||
       !dysymtab_cmd->nindirectsyms) {
     return;
   }
+
   // Find base symbol/string table addresses
   uintptr_t linkedit_base = (uintptr_t)slide + linkedit_segment->vmaddr - linkedit_segment->fileoff;
   nlist_t *symtab = (nlist_t *)(linkedit_base + symtab_cmd->symoff);
   char *strtab = (char *)(linkedit_base + symtab_cmd->stroff);
+
   // Get indirect symbol table (array of uint32_t indices into symbol table)
   uint32_t *indirect_symtab = (uint32_t *)(linkedit_base + dysymtab_cmd->indirectsymoff);
-  if (lazy_symbols) {
-    perform_rebinding_with_section(rebindings, lazy_symbols, slide, symtab, strtab, indirect_symtab);
-  }
-  if (non_lazy_symbols) {
-    perform_rebinding_with_section(rebindings, non_lazy_symbols, slide, symtab, strtab, indirect_symtab);
+
+  cur = (uintptr_t)header + sizeof(mach_header_t);
+  for (uint i = 0; i < header->ncmds; i++, cur += cur_seg_cmd->cmdsize) {
+    cur_seg_cmd = (segment_command_t *)cur;
+    if (cur_seg_cmd->cmd == LC_SEGMENT_ARCH_DEPENDENT) {
+      if (strcmp(cur_seg_cmd->segname, SEG_DATA) != 0) {
+        continue;
+      }
+      for (uint j = 0; j < cur_seg_cmd->nsects; j++) {
+        section_t *sect =
+          (section_t *)(cur + sizeof(segment_command_t)) + j;
+        if ((sect->flags & SECTION_TYPE) == S_LAZY_SYMBOL_POINTERS) {
+          perform_rebinding_with_section(rebindings, sect, slide, symtab, strtab, indirect_symtab);
+        }
+        if ((sect->flags & SECTION_TYPE) == S_NON_LAZY_SYMBOL_POINTERS) {
+          perform_rebinding_with_section(rebindings, sect, slide, symtab, strtab, indirect_symtab);
+        }
+      }
+    }
   }
 }
 
