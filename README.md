@@ -18,11 +18,6 @@ Once you add `fishhook.h`/`fishhook.c` to your project, you can rebind symbols a
 static int (*orig_close)(int);
 static int (*orig_open)(const char *, int, ...);
  
-void save_original_symbols() {
-  orig_close = dlsym(RTLD_DEFAULT, "close");
-  orig_open = dlsym(RTLD_DEFAULT, "open");
-}
- 
 int my_close(int fd) {
   printf("Calling real close(%d)\n", fd);
   return orig_close(fd);
@@ -48,8 +43,7 @@ int my_open(const char *path, int oflag, ...) {
 int main(int argc, char * argv[])
 {
   @autoreleasepool {
-    save_original_symbols();
-    rebind_symbols((struct rebinding[2]){{"close", my_close}, {"open", my_open}}, 2);
+    rebind_symbols((struct rebinding[2]){{"close", my_close, (void *)&orig_close}, {"open", my_open, (void *)&orig_open}}, 2);
  
     // Open our own binary and print out first 4 bytes (which is the same
     // for all Mach-O binaries on a given architecture)

@@ -97,6 +97,10 @@ static void perform_rebinding_with_section(struct rebindings_entry *rebindings,
       for (uint j = 0; j < cur->rebindings_nel; j++) {
         if (strlen(symbol_name) > 1 &&
             strcmp(&symbol_name[1], cur->rebindings[j].name) == 0) {
+          if (cur->rebindings[j].replaced != NULL &&
+              indirect_symbol_bindings[i] != cur->rebindings[j].replacement) {
+            *(cur->rebindings[j].replaced) = indirect_symbol_bindings[i];
+          }
           indirect_symbol_bindings[i] = cur->rebindings[j].replacement;
           goto symbol_loop;
         }

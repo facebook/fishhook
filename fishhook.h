@@ -38,6 +38,7 @@ extern "C" {
 struct rebinding {
   const char *name;
   void *replacement;
+  void **replaced;
 };
 
 /*
