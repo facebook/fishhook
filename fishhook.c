@@ -76,6 +76,15 @@ static int prepend_rebindings(struct rebindings_entry **rebindings_head,
   return 0;
 }
 
+static bool str_longer(const char *symbol, size_t len) {
+  for (size_t i = 0; i <= len; i++) {
+    if (symbol[i] == 0) {
+      return false;
+    }
+  }
+  return true;
+}
+
 static void perform_rebinding_with_section(struct rebindings_entry *rebindings,
                                            section_t *section,
                                            intptr_t slide,
@@ -95,7 +104,7 @@ static void perform_rebinding_with_section(struct rebindings_entry *rebindings,
     struct rebindings_entry *cur = rebindings;
     while (cur) {
       for (uint j = 0; j < cur->rebindings_nel; j++) {
-        if (strlen(symbol_name) > 1 &&
+        if (str_longer(symbol_name, 1) &&
             strcmp(&symbol_name[1], cur->rebindings[j].name) == 0) {
           if (cur->rebindings[j].replaced != NULL &&
               indirect_symbol_bindings[i] != cur->rebindings[j].replacement) {
