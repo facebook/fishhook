@@ -76,15 +76,6 @@ static int prepend_rebindings(struct rebindings_entry **rebindings_head,
   return 0;
 }
 
-static bool str_longer(const char *symbol, size_t len) {
-  for (size_t i = 0; i <= len; i++) {
-    if (symbol[i] == 0) {
-      return false;
-    }
-  }
-  return true;
-}
-
 static void perform_rebinding_with_section(struct rebindings_entry *rebindings,
                                            section_t *section,
                                            intptr_t slide,
@@ -101,11 +92,13 @@ static void perform_rebinding_with_section(struct rebindings_entry *rebindings,
     }
     uint32_t strtab_offset = symtab[symtab_index].n_un.n_strx;
     char *symbol_name = strtab + strtab_offset;
+    if (strnlen(symbol_name, 2) < 2) {
+      continue;
+    }
     struct rebindings_entry *cur = rebindings;
     while (cur) {
       for (uint j = 0; j < cur->rebindings_nel; j++) {
-        if (str_longer(symbol_name, 1) &&
-            strcmp(&symbol_name[1], cur->rebindings[j].name) == 0) {
+        if (strcmp(&symbol_name[1], cur->rebindings[j].name) == 0) {
           if (cur->rebindings[j].replaced != NULL &&
               indirect_symbol_bindings[i] != cur->rebindings[j].replacement) {
             *(cur->rebindings[j].replaced) = indirect_symbol_bindings[i];
