@@ -142,6 +142,7 @@ static void rebind_symbols_for_image(struct rebindings_entry *rebindings,
   }
 
   int cur_dylib_ordinal = 1;
+  bool image_has_dylibs_to_rebind = false;
 
   uintptr_t cur = (uintptr_t)header + sizeof(mach_header_t);
   for (uint i = 0; i < header->ncmds; i++, cur += cur_load_cmd->cmdsize) {
@@ -163,6 +164,7 @@ static void rebind_symbols_for_image(struct rebindings_entry *rebindings,
             struct rebinding *cur_rebinding = &entry->rebindings[el];
             if (strcmp(cur_rebinding->dylib, dylib) == 0) {
               entry->dylib_ordinals[el] = cur_dylib_ordinal;
+              image_has_dylibs_to_rebind = true;
             }
           }
         }
@@ -185,6 +187,19 @@ static void rebind_symbols_for_image(struct rebindings_entry *rebindings,
       default:
         break;
     }
+  }
+
+  // This optimization is enabled by two-level namespaces.
+  //
+  // There are two sets of dylibs:
+  //   1. The set of dylibs associated with the rebindings
+  //   2. The set of dylibs loaded by an image (i.e executable or library)
+  //
+  // When there is no overlap between these two sets of dylibs, then it becomes
+  // unnecessary to scan the symbol table of given image. However, if any
+  // rebinding has no target dylib (NULL), then all images are searched.
+  if (!image_has_dylibs_to_rebind) {
+    return;
   }
 
   if (!symtab_cmd || !dysymtab_cmd || !linkedit_segment ||
