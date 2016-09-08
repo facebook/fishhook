@@ -121,22 +121,23 @@ static void rebind_symbols_for_image(struct rebindings_entry *rebindings,
     return;
   }
 
-  segment_command_t *cur_seg_cmd;
+  struct load_command *cur_load_cmd;
   segment_command_t *linkedit_segment = NULL;
   struct symtab_command* symtab_cmd = NULL;
   struct dysymtab_command* dysymtab_cmd = NULL;
 
   uintptr_t cur = (uintptr_t)header + sizeof(mach_header_t);
-  for (uint i = 0; i < header->ncmds; i++, cur += cur_seg_cmd->cmdsize) {
-    cur_seg_cmd = (segment_command_t *)cur;
-    if (cur_seg_cmd->cmd == LC_SEGMENT_ARCH_DEPENDENT) {
-      if (strcmp(cur_seg_cmd->segname, SEG_LINKEDIT) == 0) {
-        linkedit_segment = cur_seg_cmd;
+  for (uint i = 0; i < header->ncmds; i++, cur += cur_load_cmd->cmdsize) {
+    cur_load_cmd = (struct load_command *)cur;
+    if (cur_load_cmd->cmd == LC_SEGMENT_ARCH_DEPENDENT) {
+      segment_command_t *seg_cmd = (segment_command_t *)cur_load_cmd;
+      if (strcmp(seg_cmd->segname, SEG_LINKEDIT) == 0) {
+        linkedit_segment = seg_cmd;
       }
-    } else if (cur_seg_cmd->cmd == LC_SYMTAB) {
-      symtab_cmd = (struct symtab_command*)cur_seg_cmd;
-    } else if (cur_seg_cmd->cmd == LC_DYSYMTAB) {
-      dysymtab_cmd = (struct dysymtab_command*)cur_seg_cmd;
+    } else if (cur_load_cmd->cmd == LC_SYMTAB) {
+      symtab_cmd = (struct symtab_command*)cur_load_cmd;
+    } else if (cur_load_cmd->cmd == LC_DYSYMTAB) {
+      dysymtab_cmd = (struct dysymtab_command*)cur_load_cmd;
     }
   }
 
@@ -154,14 +155,15 @@ static void rebind_symbols_for_image(struct rebindings_entry *rebindings,
   uint32_t *indirect_symtab = (uint32_t *)(linkedit_base + dysymtab_cmd->indirectsymoff);
 
   cur = (uintptr_t)header + sizeof(mach_header_t);
-  for (uint i = 0; i < header->ncmds; i++, cur += cur_seg_cmd->cmdsize) {
-    cur_seg_cmd = (segment_command_t *)cur;
-    if (cur_seg_cmd->cmd == LC_SEGMENT_ARCH_DEPENDENT) {
-      if (strcmp(cur_seg_cmd->segname, SEG_DATA) != 0 &&
-          strcmp(cur_seg_cmd->segname, SEG_DATA_CONST) != 0) {
+  for (uint i = 0; i < header->ncmds; i++, cur += cur_load_cmd->cmdsize) {
+    cur_load_cmd = (struct load_command *)cur;
+    if (cur_load_cmd->cmd == LC_SEGMENT_ARCH_DEPENDENT) {
+      segment_command_t *seg_cmd = (segment_command_t *)cur_load_cmd;
+      if (strcmp(seg_cmd->segname, SEG_DATA) != 0 &&
+          strcmp(seg_cmd->segname, SEG_DATA_CONST) != 0) {
         continue;
       }
-      for (uint j = 0; j < cur_seg_cmd->nsects; j++) {
+      for (uint j = 0; j < seg_cmd->nsects; j++) {
         section_t *sect =
           (section_t *)(cur + sizeof(segment_command_t)) + j;
         if ((sect->flags & SECTION_TYPE) == S_LAZY_SYMBOL_POINTERS) {
