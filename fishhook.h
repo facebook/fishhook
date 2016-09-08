@@ -43,6 +43,7 @@ extern "C" {
  */
 struct rebinding {
   const char *name;
+  const char *dylib;
   void *replacement;
   void **replaced;
 };

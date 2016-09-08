@@ -51,6 +51,7 @@ typedef struct nlist nlist_t;
 
 struct rebindings_entry {
   struct rebinding *rebindings;
+  uint8_t *dylib_ordinals;
   size_t rebindings_nel;
   struct rebindings_entry *next;
 };
@@ -66,6 +67,12 @@ static int prepend_rebindings(struct rebindings_entry **rebindings_head,
   }
   new_entry->rebindings = malloc(sizeof(struct rebinding) * nel);
   if (!new_entry->rebindings) {
+    free(new_entry);
+    return -1;
+  }
+  new_entry->dylib_ordinals = malloc(sizeof(uint8_t) * nel);
+  if (!new_entry->dylib_ordinals) {
+    free(new_entry->rebindings);
     free(new_entry);
     return -1;
   }
@@ -95,9 +102,13 @@ static void perform_rebinding_with_section(struct rebindings_entry *rebindings,
     if (strnlen(symbol_name, 2) < 2) {
       continue;
     }
+    int dylib_ordinal = GET_LIBRARY_ORDINAL(symtab[symtab_index].n_desc);
     struct rebindings_entry *cur = rebindings;
     while (cur) {
       for (uint j = 0; j < cur->rebindings_nel; j++) {
+        if (dylib_ordinal != cur->dylib_ordinals[j] && dylib_ordinal != SELF_LIBRARY_ORDINAL) {
+          continue;
+        }
         if (strcmp(&symbol_name[1], cur->rebindings[j].name) == 0) {
           if (cur->rebindings[j].replaced != NULL &&
               indirect_symbol_bindings[i] != cur->rebindings[j].replacement) {
@@ -126,10 +137,38 @@ static void rebind_symbols_for_image(struct rebindings_entry *rebindings,
   struct symtab_command* symtab_cmd = NULL;
   struct dysymtab_command* dysymtab_cmd = NULL;
 
+  for (struct rebindings_entry *entry = rebindings; entry != NULL; entry = entry->next) {
+    bzero(entry->dylib_ordinals, sizeof(uint8_t) * entry->rebindings_nel);
+  }
+
+  int cur_dylib_ordinal = 1;
+
   uintptr_t cur = (uintptr_t)header + sizeof(mach_header_t);
   for (uint i = 0; i < header->ncmds; i++, cur += cur_load_cmd->cmdsize) {
     cur_load_cmd = (struct load_command *)cur;
     switch (cur_load_cmd->cmd) {
+      case LC_LOAD_DYLIB:
+      case LC_LOAD_WEAK_DYLIB:
+      case LC_REEXPORT_DYLIB:
+      case LC_LOAD_UPWARD_DYLIB:
+      case LC_LAZY_LOAD_DYLIB: {
+        if ((header->flags & MH_TWOLEVEL) == 0) {
+          break;
+        }
+
+        struct dylib_command *dylib_cmd = (struct dylib_command *)cur_load_cmd;
+        char *dylib = (char *)(cur + dylib_cmd->dylib.name.offset);
+        for (struct rebindings_entry *entry = rebindings; entry != NULL; entry = entry->next) {
+          for (int el = 0; el < entry->rebindings_nel; ++el) {
+            struct rebinding *cur_rebinding = &entry->rebindings[el];
+            if (strcmp(cur_rebinding->dylib, dylib) == 0) {
+              entry->dylib_ordinals[el] = cur_dylib_ordinal;
+            }
+          }
+        }
+        ++cur_dylib_ordinal;
+        break;
+      }
       case LC_SEGMENT_ARCH_DEPENDENT: {
         segment_command_t *seg_cmd = (segment_command_t *)cur_load_cmd;
         if (strcmp(seg_cmd->segname, SEG_LINKEDIT) == 0) {
