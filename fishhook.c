@@ -106,9 +106,10 @@ static void perform_rebinding_with_section(struct rebindings_entry *rebindings,
     struct rebindings_entry *cur = rebindings;
     while (cur) {
       for (uint j = 0; j < cur->rebindings_nel; j++) {
-        if (dylib_ordinal != cur->dylib_ordinals[j] && dylib_ordinal != SELF_LIBRARY_ORDINAL) {
+        if (cur->dylib_ordinals[j] != 0 && dylib_ordinal != cur->dylib_ordinals[j] && dylib_ordinal != SELF_LIBRARY_ORDINAL) {
           continue;
         }
+
         if (strcmp(&symbol_name[1], cur->rebindings[j].name) == 0) {
           if (cur->rebindings[j].replaced != NULL &&
               indirect_symbol_bindings[i] != cur->rebindings[j].replacement) {
@@ -162,7 +163,9 @@ static void rebind_symbols_for_image(struct rebindings_entry *rebindings,
         for (struct rebindings_entry *entry = rebindings; entry != NULL; entry = entry->next) {
           for (int el = 0; el < entry->rebindings_nel; ++el) {
             struct rebinding *cur_rebinding = &entry->rebindings[el];
-            if (strcmp(cur_rebinding->dylib, dylib) == 0) {
+            if (cur_rebinding->dylib == NULL) {
+              image_has_dylibs_to_rebind = true;
+            } else if (strcmp(cur_rebinding->dylib, dylib) == 0) {
               entry->dylib_ordinals[el] = cur_dylib_ordinal;
               image_has_dylibs_to_rebind = true;
             }
