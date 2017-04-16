@@ -8,12 +8,12 @@ __fishhook__ is a very simple library that enables dynamically rebinding symbols
 
 Once you add `fishhook.h`/`fishhook.c` to your project, you can rebind symbols as follows:
 ```Objective-C
-#import <dlfcn.h>
+# import <dlfcn.h>
 
-#import <UIKit/UIKit.h>
+# import <UIKit/UIKit.h>
 
-#import "AppDelegate.h"
-#import "fishhook.h"
+# import "AppDelegate.h"
+# import "fishhook.h"
  
 static int (*orig_close)(int);
 static int (*orig_open)(const char *, int, ...);
