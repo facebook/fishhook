@@ -60,11 +60,11 @@ static struct rebindings_entry *_rebindings_head;
 static int prepend_rebindings(struct rebindings_entry **rebindings_head,
                               struct rebinding rebindings[],
                               size_t nel) {
-  struct rebindings_entry *new_entry = malloc(sizeof(struct rebindings_entry));
+  struct rebindings_entry *new_entry = (struct rebindings_entry *) malloc(sizeof(struct rebindings_entry));
   if (!new_entry) {
     return -1;
   }
-  new_entry->rebindings = malloc(sizeof(struct rebinding) * nel);
+  new_entry->rebindings = (struct rebinding *) malloc(sizeof(struct rebinding) * nel);
   if (!new_entry->rebindings) {
     free(new_entry);
     return -1;
@@ -186,7 +186,7 @@ int rebind_symbols_image(void *header,
                          size_t rebindings_nel) {
     struct rebindings_entry *rebindings_head = NULL;
     int retval = prepend_rebindings(&rebindings_head, rebindings, rebindings_nel);
-    rebind_symbols_for_image(rebindings_head, header, slide);
+    rebind_symbols_for_image(rebindings_head, (const struct mach_header *) header, slide);
     free(rebindings_head);
     return retval;
 }
