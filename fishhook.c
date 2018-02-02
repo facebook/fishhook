@@ -187,8 +187,8 @@ int rebind_symbols_image(void *header,
     struct rebindings_entry *rebindings_head = NULL;
     int retval = prepend_rebindings(&rebindings_head, rebindings, rebindings_nel);
     rebind_symbols_for_image(rebindings_head, (const struct mach_header *) header, slide);
-    if(rebindings_head->rebindings){
-        free(rebindings_head->rebindings);
+    if (rebindings_head->rebindings) {
+      free(rebindings_head->rebindings);
     }
     free(rebindings_head);
     return retval;
