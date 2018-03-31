@@ -21,15 +21,15 @@
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#import "fishhook.h"
+#include "fishhook.h"
 
-#import <dlfcn.h>
-#import <stdlib.h>
-#import <string.h>
-#import <sys/types.h>
-#import <mach-o/dyld.h>
-#import <mach-o/loader.h>
-#import <mach-o/nlist.h>
+#include <dlfcn.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/types.h>
+#include <mach-o/dyld.h>
+#include <mach-o/loader.h>
+#include <mach-o/nlist.h>
 
 #ifdef __LP64__
 typedef struct mach_header_64 mach_header_t;
