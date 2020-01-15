@@ -108,7 +108,7 @@ static void perform_rebinding_with_section(struct rebindings_entry *rebindings,
                                            nlist_t *symtab,
                                            char *strtab,
                                            uint32_t *indirect_symtab) {
-  const bool isDataConst = strcmp(section->segname, "__DATA_CONST") == 0;
+  const bool isDataConst = strcmp(section->segname, SEG_DATA_CONST) == 0;
   uint32_t *indirect_symbol_indices = indirect_symtab + section->reserved1;
   void **indirect_symbol_bindings = (void **)((uintptr_t)slide + section->addr);
   vm_prot_t oldProtection = VM_PROT_READ;
