@@ -190,12 +190,12 @@ static void rebind_symbols_for_image(struct rebindings_entry *rebindings,
   }
 
   // Find base symbol/string table addresses
-  uintptr_t linkedit_base = (uintptr_t)slide + linkedit_segment->vmaddr - linkedit_segment->fileoff;
-  nlist_t *symtab = (nlist_t *)(linkedit_base + symtab_cmd->symoff);
-  char *strtab = (char *)(linkedit_base + symtab_cmd->stroff);
+  uintptr_t linkedit_base = (uintptr_t)slide + linkedit_segment->vmaddr;
+  nlist_t *symtab = (nlist_t *)(linkedit_base + symtab_cmd->symoff - linkedit_segment->fileoff);
+  char *strtab = (char *)(linkedit_base + symtab_cmd->stroff - linkedit_segment->fileoff);
 
   // Get indirect symbol table (array of uint32_t indices into symbol table)
-  uint32_t *indirect_symtab = (uint32_t *)(linkedit_base + dysymtab_cmd->indirectsymoff);
+  uint32_t *indirect_symtab = (uint32_t *)(linkedit_base + dysymtab_cmd->indirectsymoff - linkedit_segment->fileoff);
 
   cur = (uintptr_t)header + sizeof(mach_header_t);
   for (uint i = 0; i < header->ncmds; i++, cur += cur_seg_cmd->cmdsize) {
