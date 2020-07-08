@@ -6,7 +6,7 @@ Pod::Spec.new do |spec|
   spec.author           = { "Facebook, Inc." => "https://github.com/facebook" }
   spec.summary          = "A library that enables dynamically rebinding symbols in Mach-O binaries running on iOS."
   spec.source           = { :git => "https://github.com/facebook/fishhook.git", :tag => '0.2'}
-  spec.source_files     = "fishhook.{h,c}"
+  spec.source_files     = "Sources/**/*.{h,c}"
   spec.social_media_url = 'https://twitter.com/fbOpenSource'
 
   spec.ios.deployment_target = '6.0'
