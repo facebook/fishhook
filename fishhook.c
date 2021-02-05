@@ -89,8 +89,7 @@ static vm_prot_t get_protection(void *sectionStart) {
 #if __LP64__
   mach_msg_type_number_t count = VM_REGION_BASIC_INFO_COUNT_64;
   vm_region_basic_info_data_64_t info;
-  kern_return_t info_ret = vm_region_64(
-      task, &address, &size, VM_REGION_BASIC_INFO_64, (vm_region_info_64_t)&info, &count, &object);
+  kern_return_t info_ret = vm_region_64(task, &address, &size, VM_REGION_BASIC_INFO_64, (vm_region_info_64_t)&info, &count, &object);
 #else
   mach_msg_type_number_t count = VM_REGION_BASIC_INFO_COUNT;
   vm_region_basic_info_data_t info;
@@ -119,7 +118,7 @@ static void perform_rebinding_with_section(struct rebindings_entry *rebindings,
   for (uint i = 0; i < section->size / sizeof(void *); i++) {
     uint32_t symtab_index = indirect_symbol_indices[i];
     if (symtab_index == INDIRECT_SYMBOL_ABS || symtab_index == INDIRECT_SYMBOL_LOCAL ||
-        symtab_index == (INDIRECT_SYMBOL_LOCAL   | INDIRECT_SYMBOL_ABS)) {
+        symtab_index == (INDIRECT_SYMBOL_LOCAL | INDIRECT_SYMBOL_ABS)) {
       continue;
     }
     uint32_t strtab_offset = symtab[symtab_index].n_un.n_strx;
@@ -221,21 +220,21 @@ static void rebind_symbols_for_image(struct rebindings_entry *rebindings,
 
 static void _rebind_symbols_for_image(const struct mach_header *header,
                                       intptr_t slide) {
-    rebind_symbols_for_image(_rebindings_head, header, slide);
+  rebind_symbols_for_image(_rebindings_head, header, slide);
 }
 
 int rebind_symbols_image(void *header,
                          intptr_t slide,
                          struct rebinding rebindings[],
                          size_t rebindings_nel) {
-    struct rebindings_entry *rebindings_head = NULL;
-    int retval = prepend_rebindings(&rebindings_head, rebindings, rebindings_nel);
-    rebind_symbols_for_image(rebindings_head, (const struct mach_header *) header, slide);
-    if (rebindings_head) {
-      free(rebindings_head->rebindings);
-    }
-    free(rebindings_head);
-    return retval;
+  struct rebindings_entry *rebindings_head = NULL;
+  int retval = prepend_rebindings(&rebindings_head, rebindings, rebindings_nel);
+  rebind_symbols_for_image(rebindings_head, (const struct mach_header *) header, slide);
+  if (rebindings_head) {
+    free(rebindings_head->rebindings);
+  }
+  free(rebindings_head);
+  return retval;
 }
 
 int rebind_symbols(struct rebinding rebindings[], size_t rebindings_nel) {
