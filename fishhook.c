@@ -54,6 +54,10 @@ typedef struct nlist nlist_t;
 #define SEG_DATA_CONST  "__DATA_CONST"
 #endif
 
+#ifndef SEG_AUTH_CONST
+#define SEG_AUTH_CONST  "__AUTH_CONST"
+#endif
+
 struct rebindings_entry {
   struct rebinding *rebindings;
   size_t rebindings_nel;
@@ -101,20 +105,15 @@ static vm_prot_t get_protection(void *sectionStart) {
     return VM_PROT_READ;
   }
 }
+
 static void perform_rebinding_with_section(struct rebindings_entry *rebindings,
                                            section_t *section,
                                            intptr_t slide,
                                            nlist_t *symtab,
                                            char *strtab,
                                            uint32_t *indirect_symtab) {
-  const bool isDataConst = strcmp(section->segname, SEG_DATA_CONST) == 0;
   uint32_t *indirect_symbol_indices = indirect_symtab + section->reserved1;
   void **indirect_symbol_bindings = (void **)((uintptr_t)slide + section->addr);
-  vm_prot_t oldProtection = VM_PROT_READ;
-  if (isDataConst) {
-    oldProtection = get_protection(rebindings);
-    mprotect(indirect_symbol_bindings, section->size, PROT_READ | PROT_WRITE);
-  }
   for (uint i = 0; i < section->size / sizeof(void *); i++) {
     uint32_t symtab_index = indirect_symbol_indices[i];
     if (symtab_index == INDIRECT_SYMBOL_ABS || symtab_index == INDIRECT_SYMBOL_LOCAL ||
@@ -133,26 +132,26 @@ static void perform_rebinding_with_section(struct rebindings_entry *rebindings,
               indirect_symbol_bindings[i] != cur->rebindings[j].replacement) {
             *(cur->rebindings[j].replaced) = indirect_symbol_bindings[i];
           }
+          bool is_prot_changed = false;
+          void **address_to_write = indirect_symbol_bindings + i;
+          vm_prot_t prot = get_protection(address_to_write);
+          if ((prot & VM_PROT_WRITE) == 0) {
+            is_prot_changed = true;
+            kern_return_t success = vm_protect(mach_task_self(), (vm_address_t)address_to_write, sizeof(void *), false, prot | VM_PROT_WRITE);
+            if (success != KERN_SUCCESS) {
+              goto symbol_loop;
+            }
+          }
           indirect_symbol_bindings[i] = cur->rebindings[j].replacement;
+          if (is_prot_changed) {
+            vm_protect(mach_task_self(), (vm_address_t)address_to_write, sizeof(void *), false, prot);
+          }
           goto symbol_loop;
         }
       }
       cur = cur->next;
     }
   symbol_loop:;
-  }
-  if (isDataConst) {
-    int protection = 0;
-    if (oldProtection & VM_PROT_READ) {
-      protection |= PROT_READ;
-    }
-    if (oldProtection & VM_PROT_WRITE) {
-      protection |= PROT_WRITE;
-    }
-    if (oldProtection & VM_PROT_EXECUTE) {
-      protection |= PROT_EXEC;
-    }
-    mprotect(indirect_symbol_bindings, section->size, protection);
   }
 }
 
@@ -201,7 +200,8 @@ static void rebind_symbols_for_image(struct rebindings_entry *rebindings,
     cur_seg_cmd = (segment_command_t *)cur;
     if (cur_seg_cmd->cmd == LC_SEGMENT_ARCH_DEPENDENT) {
       if (strcmp(cur_seg_cmd->segname, SEG_DATA) != 0 &&
-          strcmp(cur_seg_cmd->segname, SEG_DATA_CONST) != 0) {
+          strcmp(cur_seg_cmd->segname, SEG_DATA_CONST) != 0 &&
+          strcmp(cur_seg_cmd->segname, SEG_AUTH_CONST) != 0) {
         continue;
       }
       for (uint j = 0; j < cur_seg_cmd->nsects; j++) {
