@@ -35,6 +35,7 @@
 #include <mach-o/dyld.h>
 #include <mach-o/loader.h>
 #include <mach-o/nlist.h>
+#include <pthread.h>
 
 #ifdef __LP64__
 typedef struct mach_header_64 mach_header_t;
@@ -65,6 +66,7 @@ struct rebindings_entry {
 };
 
 static struct rebindings_entry *_rebindings_head;
+static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 static int prepend_rebindings(struct rebindings_entry **rebindings_head,
                               struct rebinding rebindings[],
@@ -120,9 +122,10 @@ static void perform_rebinding_with_section(struct rebindings_entry *rebindings,
   vm_size_t trunc_address = (vm_size_t)indirect_symbol_bindings;
   vm_size_t trunc_size = 0;
   if (isDataConst || isAuthConst) {
-    oldProtection = get_protection(rebindings);
     trunc_address = trunc_page((vm_size_t)indirect_symbol_bindings);
     trunc_size =(vm_size_t)indirect_symbol_bindings -trunc_address;
+    pthread_mutex_lock(&mutex);
+    oldProtection = get_protection((void *)trunc_address);
     mprotect((void *)trunc_address, section->size+trunc_size, PROT_READ | PROT_WRITE);
   }
   for (uint i = 0; i < section->size / sizeof(void *); i++) {
@@ -163,6 +166,7 @@ static void perform_rebinding_with_section(struct rebindings_entry *rebindings,
       protection |= PROT_EXEC;
     }
     mprotect((void *)trunc_address, section->size+trunc_size, protection);
+    pthread_mutex_unlock(&mutex);
   }
 }
 
