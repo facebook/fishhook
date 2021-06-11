@@ -81,12 +81,12 @@ static int prepend_rebindings(struct rebindings_entry **rebindings_head,
   return 0;
 }
 
-static vm_prot_t get_protection(void *sectionStart) {
+static int get_protection(void *addr, vm_prot_t *prot, vm_prot_t *max_prot) {
   mach_port_t task = mach_task_self();
   vm_size_t size = 0;
-  vm_address_t address = (vm_address_t)sectionStart;
+  vm_address_t address = (vm_address_t)addr;
   memory_object_name_t object;
-#if __LP64__
+#ifdef __LP64__
   mach_msg_type_number_t count = VM_REGION_BASIC_INFO_COUNT_64;
   vm_region_basic_info_data_64_t info;
   kern_return_t info_ret = vm_region_64(
@@ -97,25 +97,54 @@ static vm_prot_t get_protection(void *sectionStart) {
   kern_return_t info_ret = vm_region(task, &address, &size, VM_REGION_BASIC_INFO, (vm_region_info_t)&info, &count, &object);
 #endif
   if (info_ret == KERN_SUCCESS) {
-    return info.protection;
-  } else {
-    return VM_PROT_READ;
+    if (prot != NULL)
+      *prot = info.protection;
+
+    if (max_prot != NULL)
+      *max_prot = info.max_protection;
+
+    return 0;
   }
+
+  return -1;
 }
+
 static void perform_rebinding_with_section(struct rebindings_entry *rebindings,
                                            section_t *section,
                                            intptr_t slide,
                                            nlist_t *symtab,
                                            char *strtab,
                                            uint32_t *indirect_symtab) {
-  const bool isDataConst = strcmp(section->segname, SEG_DATA_CONST) == 0;
   uint32_t *indirect_symbol_indices = indirect_symtab + section->reserved1;
   void **indirect_symbol_bindings = (void **)((uintptr_t)slide + section->addr);
-  vm_prot_t oldProtection = VM_PROT_READ;
-  if (isDataConst) {
-    oldProtection = get_protection(rebindings);
-    mprotect(indirect_symbol_bindings, section->size, PROT_READ | PROT_WRITE);
+  vm_prot_t prot;
+  vm_prot_t max_prot;
+  uintptr_t prot_addr;
+
+  if (get_protection(indirect_symbol_bindings, &prot, &max_prot) < 0)
+    return;
+
+  if ((prot & VM_PROT_WRITE) == 0) {
+    kern_return_t err;
+
+    prot_addr = (uintptr_t)indirect_symbol_bindings;
+    /**
+     * if this segment does not have the 'write' permission,
+     * then add it.
+     * -- Lianfu Hao(@agora.io) Jun 11th, 2021
+     **/
+	err = vm_protect (mach_task_self (), prot_addr, section->size, false, prot | VM_PROT_WRITE | VM_PROT_COPY);
+    if (err != 0) {
+      /**
+       * Once we failed to change the vm protection, we
+       * MUST NOT continue the following write actions!
+       * iOS 15 has corrected the const segments prot.
+       * -- Lianfu Hao(@agora.io) Jun 11th, 2021
+       **/
+      return;
+    }
   }
+
   for (uint i = 0; i < section->size / sizeof(void *); i++) {
     uint32_t symtab_index = indirect_symbol_indices[i];
     if (symtab_index == INDIRECT_SYMBOL_ABS || symtab_index == INDIRECT_SYMBOL_LOCAL ||
@@ -142,19 +171,9 @@ static void perform_rebinding_with_section(struct rebindings_entry *rebindings,
     }
   symbol_loop:;
   }
-  if (isDataConst) {
-    int protection = 0;
-    if (oldProtection & VM_PROT_READ) {
-      protection |= PROT_READ;
-    }
-    if (oldProtection & VM_PROT_WRITE) {
-      protection |= PROT_WRITE;
-    }
-    if (oldProtection & VM_PROT_EXECUTE) {
-      protection |= PROT_EXEC;
-    }
-    mprotect(indirect_symbol_bindings, section->size, protection);
-  }
+
+  if ((prot & VM_PROT_WRITE) == 0)
+    vm_protect (mach_task_self (), prot_addr, section->size, true, max_prot);
 }
 
 static void rebind_symbols_for_image(struct rebindings_entry *rebindings,
