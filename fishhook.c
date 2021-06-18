@@ -81,6 +81,7 @@ static int prepend_rebindings(struct rebindings_entry **rebindings_head,
   return 0;
 }
 
+#if 0
 static int get_protection(void *addr, vm_prot_t *prot, vm_prot_t *max_prot) {
   mach_port_t task = mach_task_self();
   vm_size_t size = 0;
@@ -108,6 +109,7 @@ static int get_protection(void *addr, vm_prot_t *prot, vm_prot_t *max_prot) {
 
   return -1;
 }
+#endif
 
 static void perform_rebinding_with_section(struct rebindings_entry *rebindings,
                                            section_t *section,
@@ -117,33 +119,6 @@ static void perform_rebinding_with_section(struct rebindings_entry *rebindings,
                                            uint32_t *indirect_symtab) {
   uint32_t *indirect_symbol_indices = indirect_symtab + section->reserved1;
   void **indirect_symbol_bindings = (void **)((uintptr_t)slide + section->addr);
-  vm_prot_t prot;
-  vm_prot_t max_prot;
-  uintptr_t prot_addr;
-
-  if (get_protection(indirect_symbol_bindings, &prot, &max_prot) < 0)
-    return;
-
-  if ((prot & VM_PROT_WRITE) == 0) {
-    kern_return_t err;
-
-    prot_addr = (uintptr_t)indirect_symbol_bindings;
-    /**
-     * if this segment does not have the 'write' permission,
-     * then add it.
-     * -- Lianfu Hao(@agora.io) Jun 11th, 2021
-     **/
-	err = vm_protect (mach_task_self (), prot_addr, section->size, false, prot | VM_PROT_WRITE | VM_PROT_COPY);
-    if (err != 0) {
-      /**
-       * Once we failed to change the vm protection, we
-       * MUST NOT continue the following write actions!
-       * iOS 15 has corrected the const segments prot.
-       * -- Lianfu Hao(@agora.io) Jun 11th, 2021
-       **/
-      return;
-    }
-  }
 
   for (uint i = 0; i < section->size / sizeof(void *); i++) {
     uint32_t symtab_index = indirect_symbol_indices[i];
@@ -157,13 +132,29 @@ static void perform_rebinding_with_section(struct rebindings_entry *rebindings,
     struct rebindings_entry *cur = rebindings;
     while (cur) {
       for (uint j = 0; j < cur->rebindings_nel; j++) {
-        if (symbol_name_longer_than_1 &&
-            strcmp(&symbol_name[1], cur->rebindings[j].name) == 0) {
-          if (cur->rebindings[j].replaced != NULL &&
-              indirect_symbol_bindings[i] != cur->rebindings[j].replacement) {
+        if (symbol_name_longer_than_1 && strcmp(&symbol_name[1], cur->rebindings[j].name) == 0) {
+          kern_return_t err;
+
+          if (cur->rebindings[j].replaced != NULL && indirect_symbol_bindings[i] != cur->rebindings[j].replacement)
             *(cur->rebindings[j].replaced) = indirect_symbol_bindings[i];
+
+          /**
+           * 1. Moved the vm protection modifying codes to here to reduce the
+           *    changing scope.
+           * 2. Adding VM_PROT_WRITE mode unconditionally because vm_region
+           *    API on some iOS/Mac reports mismatch vm protection attributes.
+           * -- Lianfu Hao Jun 16th, 2021
+           **/
+          err = vm_protect (mach_task_self (), (uintptr_t)indirect_symbol_bindings, section->size, 0, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
+          if (err == KERN_SUCCESS) {
+            /**
+             * Once we failed to change the vm protection, we
+             * MUST NOT continue the following write actions!
+             * iOS 15 has corrected the const segments prot.
+             * -- Lionfore Hao Jun 11th, 2021
+             **/
+            indirect_symbol_bindings[i] = cur->rebindings[j].replacement;
           }
-          indirect_symbol_bindings[i] = cur->rebindings[j].replacement;
           goto symbol_loop;
         }
       }
@@ -171,9 +162,6 @@ static void perform_rebinding_with_section(struct rebindings_entry *rebindings,
     }
   symbol_loop:;
   }
-
-  if ((prot & VM_PROT_WRITE) == 0)
-    vm_protect (mach_task_self (), prot_addr, section->size, true, max_prot);
 }
 
 static void rebind_symbols_for_image(struct rebindings_entry *rebindings,
