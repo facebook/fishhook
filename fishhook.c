@@ -36,6 +36,10 @@
 #include <mach-o/loader.h>
 #include <mach-o/nlist.h>
 
+#if __has_include(<ptrauth.h>)
+#include <ptrauth.h>
+#endif
+
 #ifdef __LP64__
 typedef struct mach_header_64 mach_header_t;
 typedef struct segment_command_64 segment_command_t;
@@ -153,7 +157,16 @@ static void perform_rebinding_with_section(struct rebindings_entry *rebindings,
              * iOS 15 has corrected the const segments prot.
              * -- Lionfore Hao Jun 11th, 2021
              **/
+            #if !__has_feature(ptrauth_calls)
             indirect_symbol_bindings[i] = cur->rebindings[j].replacement;
+            #else
+            void *replacement = cur->rebindings[j].replacement;
+            if (!strcmp(section->sectname, "__auth_got")) {
+              void *stripped = ptrauth_strip(replacement, ptrauth_key_process_independent_code);
+              replacement = ptrauth_sign_unauthenticated(stripped, ptrauth_key_process_independent_code, &indirect_symbol_bindings[i]);
+            }
+            indirect_symbol_bindings[i] = replacement;
+            #endif
           }
           goto symbol_loop;
         }
